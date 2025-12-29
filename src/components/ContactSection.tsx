@@ -7,8 +7,9 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 
 const bookingSchema = z.object({
-  firstName: z.string().trim().min(1, "First name is required"),
-  lastName: z.string().trim().min(1, "Last name is required"),
+  firstName: z.string().trim().min(1, "First name is required").max(50, "First name too long"),
+  lastName: z.string().trim().min(1, "Last name is required").max(50, "Last name too long"),
+  email: z.string().trim().email("Invalid email address").max(255, "Email too long"),
   phone: z.string().trim().optional(),
   service: z.string().min(1, "Please select a service"),
   datetime: z.string().min(1, "Please choose a date & time"),
@@ -57,6 +58,7 @@ const ContactSection = () => {
   const [form, setForm] = useState<BookingFormState>({
     firstName: "",
     lastName: "",
+    email: "",
     phone: "",
     service: "",
     datetime: "",
@@ -111,7 +113,7 @@ const ContactSection = () => {
       const { error } = await supabase.from("appointments").insert({
         customer_name,
         customer_phone: parsed.data.phone?.trim() || null,
-        customer_email: null,
+        customer_email: parsed.data.email,
         service_name,
         appointment_date,
         appointment_time,
@@ -124,7 +126,7 @@ const ContactSection = () => {
         description: "Thanks! We'll confirm your appointment shortly.",
       });
 
-      setForm({ firstName: "", lastName: "", phone: "", service: "", datetime: "" });
+      setForm({ firstName: "", lastName: "", email: "", phone: "", service: "", datetime: "" });
       setFieldErrors({});
     } catch (err: any) {
       toast({
@@ -248,6 +250,23 @@ const ContactSection = () => {
                       <p className="mt-1 text-xs font-body text-destructive">{fieldErrors.lastName}</p>
                     )}
                   </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-body text-muted-foreground mb-2">
+                    Email
+                  </label>
+                  <input
+                    type="email"
+                    value={form.email}
+                    onChange={(e) => setField("email", e.target.value)}
+                    aria-invalid={!!fieldErrors.email}
+                    className="w-full px-4 py-3 rounded-lg bg-muted border border-gold/10 text-foreground font-body focus:outline-none focus:border-gold transition-colors"
+                    placeholder="john@example.com"
+                  />
+                  {fieldErrors.email && (
+                    <p className="mt-1 text-xs font-body text-destructive">{fieldErrors.email}</p>
+                  )}
                 </div>
 
                 <div>
