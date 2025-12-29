@@ -1,8 +1,26 @@
 import { motion } from "framer-motion";
+import { useMemo, useState } from "react";
+import { z } from "zod";
 import { Button } from "@/components/ui/button";
 import { MapPin, Phone, Clock, Mail, Send } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
+import { useToast } from "@/hooks/use-toast";
+
+const bookingSchema = z.object({
+  firstName: z.string().trim().min(1, "First name is required"),
+  lastName: z.string().trim().min(1, "Last name is required"),
+  phone: z.string().trim().optional(),
+  service: z.string().min(1, "Please select a service"),
+  datetime: z.string().min(1, "Please choose a date & time"),
+});
+
+type BookingFormState = z.infer<typeof bookingSchema>;
+
+type FieldErrors = Partial<Record<keyof BookingFormState, string>>;
 
 const ContactSection = () => {
+  const { toast } = useToast();
+
   const contactInfo = [
     {
       icon: MapPin,
@@ -25,6 +43,99 @@ const ContactSection = () => {
       details: ["book@oldthaibarber.com", "info@oldthaibarber.com"],
     },
   ];
+
+  const serviceLabel = useMemo(
+    () => ({
+      haircut: "Hair Cut",
+      beard: "Beard Styling",
+      wash: "Hair Wash",
+      premium: "Premium Grooming",
+    }),
+    []
+  );
+
+  const [form, setForm] = useState<BookingFormState>({
+    firstName: "",
+    lastName: "",
+    phone: "",
+    service: "",
+    datetime: "",
+  });
+
+  const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
+  const [submitting, setSubmitting] = useState(false);
+
+  const setField = (key: keyof BookingFormState, value: string) => {
+    setForm((prev) => ({ ...prev, [key]: value }));
+    setFieldErrors((prev) => ({ ...prev, [key]: undefined }));
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    const parsed = bookingSchema.safeParse(form);
+    if (!parsed.success) {
+      const nextErrors: FieldErrors = {};
+      for (const issue of parsed.error.issues) {
+        const key = issue.path[0] as keyof BookingFormState;
+        if (!nextErrors[key]) nextErrors[key] = issue.message;
+      }
+      setFieldErrors(nextErrors);
+      toast({
+        title: "Please check your details",
+        description: "Fix the highlighted fields and try again.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const [appointment_date, timePartRaw] = parsed.data.datetime.split("T");
+    const hhmm = (timePartRaw ?? "").slice(0, 5);
+    const appointment_time = hhmm ? `${hhmm}:00` : null;
+
+    if (!appointment_date || !appointment_time) {
+      toast({
+        title: "Invalid date/time",
+        description: "Please select a valid date and time.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      const customer_name = `${parsed.data.firstName} ${parsed.data.lastName}`.trim();
+      const service_name =
+        (serviceLabel as Record<string, string>)[parsed.data.service] ?? parsed.data.service;
+
+      const { error } = await supabase.from("appointments").insert({
+        customer_name,
+        customer_phone: parsed.data.phone?.trim() || null,
+        customer_email: null,
+        service_name,
+        appointment_date,
+        appointment_time,
+      });
+
+      if (error) throw error;
+
+      toast({
+        title: "Appointment request sent",
+        description: "Thanks! We'll confirm your appointment shortly.",
+      });
+
+      setForm({ firstName: "", lastName: "", phone: "", service: "", datetime: "" });
+      setFieldErrors({});
+    } catch (err: any) {
+      toast({
+        title: "Could not send appointment",
+        description: err?.message ?? "Please try again in a moment.",
+        variant: "destructive",
+      });
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
   return (
     <section id="contact" className="py-24 bg-card relative overflow-hidden">
@@ -103,7 +214,7 @@ const ContactSection = () => {
                 Book Your Appointment
               </h3>
 
-              <form className="space-y-4">
+              <form className="space-y-4" onSubmit={handleSubmit}>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-body text-muted-foreground mb-2">
@@ -111,9 +222,15 @@ const ContactSection = () => {
                     </label>
                     <input
                       type="text"
+                      value={form.firstName}
+                      onChange={(e) => setField("firstName", e.target.value)}
+                      aria-invalid={!!fieldErrors.firstName}
                       className="w-full px-4 py-3 rounded-lg bg-muted border border-gold/10 text-foreground font-body focus:outline-none focus:border-gold transition-colors"
                       placeholder="John"
                     />
+                    {fieldErrors.firstName && (
+                      <p className="mt-1 text-xs font-body text-destructive">{fieldErrors.firstName}</p>
+                    )}
                   </div>
                   <div>
                     <label className="block text-sm font-body text-muted-foreground mb-2">
@@ -121,9 +238,15 @@ const ContactSection = () => {
                     </label>
                     <input
                       type="text"
+                      value={form.lastName}
+                      onChange={(e) => setField("lastName", e.target.value)}
+                      aria-invalid={!!fieldErrors.lastName}
                       className="w-full px-4 py-3 rounded-lg bg-muted border border-gold/10 text-foreground font-body focus:outline-none focus:border-gold transition-colors"
                       placeholder="Doe"
                     />
+                    {fieldErrors.lastName && (
+                      <p className="mt-1 text-xs font-body text-destructive">{fieldErrors.lastName}</p>
+                    )}
                   </div>
                 </div>
 
@@ -133,6 +256,8 @@ const ContactSection = () => {
                   </label>
                   <input
                     type="tel"
+                    value={form.phone}
+                    onChange={(e) => setField("phone", e.target.value)}
                     className="w-full px-4 py-3 rounded-lg bg-muted border border-gold/10 text-foreground font-body focus:outline-none focus:border-gold transition-colors"
                     placeholder="+66 81 234 5678"
                   />
@@ -142,13 +267,21 @@ const ContactSection = () => {
                   <label className="block text-sm font-body text-muted-foreground mb-2">
                     Service
                   </label>
-                  <select className="w-full px-4 py-3 rounded-lg bg-muted border border-gold/10 text-foreground font-body focus:outline-none focus:border-gold transition-colors">
+                  <select
+                    value={form.service}
+                    onChange={(e) => setField("service", e.target.value)}
+                    aria-invalid={!!fieldErrors.service}
+                    className="w-full px-4 py-3 rounded-lg bg-muted border border-gold/10 text-foreground font-body focus:outline-none focus:border-gold transition-colors"
+                  >
                     <option value="">Select a service</option>
                     <option value="haircut">Hair Cut - $35</option>
                     <option value="beard">Beard Styling - $25</option>
                     <option value="wash">Hair Wash - $15</option>
                     <option value="premium">Premium Grooming - $75</option>
                   </select>
+                  {fieldErrors.service && (
+                    <p className="mt-1 text-xs font-body text-destructive">{fieldErrors.service}</p>
+                  )}
                 </div>
 
                 <div>
@@ -157,12 +290,24 @@ const ContactSection = () => {
                   </label>
                   <input
                     type="datetime-local"
+                    value={form.datetime}
+                    onChange={(e) => setField("datetime", e.target.value)}
+                    aria-invalid={!!fieldErrors.datetime}
                     className="w-full px-4 py-3 rounded-lg bg-muted border border-gold/10 text-foreground font-body focus:outline-none focus:border-gold transition-colors"
                   />
+                  {fieldErrors.datetime && (
+                    <p className="mt-1 text-xs font-body text-destructive">{fieldErrors.datetime}</p>
+                  )}
                 </div>
 
-                <Button variant="gold" size="lg" className="w-full mt-4">
-                  <span>Book Now</span>
+                <Button
+                  type="submit"
+                  variant="gold"
+                  size="lg"
+                  className="w-full mt-4"
+                  disabled={submitting}
+                >
+                  <span>{submitting ? "Booking..." : "Book Now"}</span>
                   <Send className="w-4 h-4" />
                 </Button>
               </form>
@@ -175,3 +320,4 @@ const ContactSection = () => {
 };
 
 export default ContactSection;
+
