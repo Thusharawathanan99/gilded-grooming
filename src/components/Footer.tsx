@@ -1,4 +1,5 @@
 import { Scissors, Facebook, Instagram, Twitter } from "lucide-react";
+import { Link } from "react-router-dom";
 
 const Footer = () => {
   return (
@@ -89,6 +90,9 @@ const Footer = () => {
             <a href="#" className="text-muted-foreground hover:text-gold font-body text-sm transition-colors">
               Terms of Service
             </a>
+            <Link to="/auth" className="text-muted-foreground hover:text-gold font-body text-sm transition-colors">
+              Admin Login
+            </Link>
           </div>
         </div>
       </div>
