@@ -1,19 +1,46 @@
 import { motion } from "framer-motion";
 import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
+
+// Fallback images if database is empty
 import serviceHaircut from "@/assets/service-haircut.jpg";
 import serviceBeard from "@/assets/service-beard.jpg";
 import serviceWash from "@/assets/service-wash.jpg";
 import serviceGrooming from "@/assets/service-grooming.jpg";
 
+interface GalleryImage {
+  id: string;
+  title: string | null;
+  image_url: string;
+  category: string | null;
+  is_featured: boolean;
+  display_order: number;
+}
+
+const fallbackGallery = [
+  { id: "1", image_url: serviceHaircut, title: "Classic Fade", category: "Haircut", is_featured: true, display_order: 0 },
+  { id: "2", image_url: serviceBeard, title: "Beard Sculpting", category: "Grooming", is_featured: false, display_order: 1 },
+  { id: "3", image_url: serviceWash, title: "Relaxation", category: "Experience", is_featured: false, display_order: 2 },
+  { id: "4", image_url: serviceGrooming, title: "Premium Care", category: "Treatment", is_featured: false, display_order: 3 },
+];
+
 const GallerySection = () => {
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
 
-  const galleryItems = [
-    { image: serviceHaircut, title: "Classic Fade", category: "Haircut" },
-    { image: serviceBeard, title: "Beard Sculpting", category: "Grooming" },
-    { image: serviceWash, title: "Relaxation", category: "Experience" },
-    { image: serviceGrooming, title: "Premium Care", category: "Treatment" },
-  ];
+  const { data: dbImages } = useQuery({
+    queryKey: ["public-gallery"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("gallery")
+        .select("*")
+        .order("display_order", { ascending: true });
+      if (error) throw error;
+      return data as GalleryImage[];
+    },
+  });
+
+  const galleryItems = dbImages && dbImages.length > 0 ? dbImages : fallbackGallery;
 
   return (
     <section id="gallery" className="py-24 bg-background relative overflow-hidden">
@@ -48,7 +75,7 @@ const GallerySection = () => {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           {galleryItems.map((item, index) => (
             <motion.div
-              key={index}
+              key={item.id}
               initial={{ opacity: 0, y: 30 }}
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true, margin: "-50px" }}
@@ -58,8 +85,8 @@ const GallerySection = () => {
               onMouseLeave={() => setHoveredIndex(null)}
             >
               <motion.img
-                src={item.image}
-                alt={item.title}
+                src={item.image_url}
+                alt={item.title || "Gallery image"}
                 className="w-full h-full object-cover"
                 animate={{
                   scale: hoveredIndex === index ? 1.15 : 1,
@@ -88,7 +115,7 @@ const GallerySection = () => {
                   {item.category}
                 </span>
                 <h3 className="font-display text-2xl font-bold text-foreground">
-                  {item.title}
+                  {item.title || item.category}
                 </h3>
               </motion.div>
 
